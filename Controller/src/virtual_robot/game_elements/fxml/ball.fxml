@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Simple ball graphics (a single circle). -->
+
+<?import javafx.scene.Group?>
+<?import javafx.scene.shape.Circle?>
+
+<Group xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1"
+    fx:controller="virtual_robot.game_elements.classes.Ball">
+    <children>
+        <!-- Center at (0,0) so it rotates/translates correctly -->
+        <Circle fx:id="ballCircle"
+            centerX="0.0" centerY="0.0"
+            radius="20.0"
+            fill="#ff8c00"
+            stroke="#b35a00"
+            strokeWidth="2.0"/>
+    </children>
+</Group>

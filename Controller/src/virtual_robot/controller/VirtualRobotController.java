@@ -55,6 +55,10 @@ import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.ToggleGroup;
+import virtual_robot.games.Decode;
+
 
 /**
  * For internal use only. Controller class for the JavaFX application.
@@ -79,6 +83,37 @@ public class VirtualRobotController {
     @FXML private Label lblRunTime;
     @FXML private HBox hbxGamePads;
     @FXML private VBox vbxRight;
+    @FXML private RadioButton rbStopwatch;
+    @FXML private Label lblScore;
+    @FXML private Label lblCredit;
+    @FXML private RadioButton rbTwoMin;
+    @FXML private ImageView imgCyberSages;
+    @FXML private Label lblTeamNumber;
+    @FXML private Label controllerLabel;
+
+
+
+
+
+
+
+
+    private final ToggleGroup timerModeGroup = new ToggleGroup();
+
+
+
+    private static final double MATCH_LENGTH_SECONDS = 120.0;
+
+    private volatile int score = 0;
+
+    // Match timing
+    private volatile boolean matchMode = true;      // default
+    private volatile boolean matchEnded = false;
+    private volatile long opModeStartNanos = 0L;
+    private static final double MATCH_SECONDS = 120.0;
+
+
+
 
     // dyn4j world
     World<Body> world = new World<>();
@@ -87,6 +122,14 @@ public class VirtualRobotController {
     private HardwareMap hardwareMap = null;
     private VirtualBot bot = null;
     Gamepad gamePad1 = new Gamepad();
+    public Gamepad getGamePad1() {
+        return gamePad1;
+    }
+    public VirtualBot getBot() {
+        return bot;
+    }
+
+
     Gamepad gamePad2 = new Gamepad();
     GamePadHelper gamePadHelper = null;
     ScheduledExecutorService gamePadExecutorService = Executors.newSingleThreadScheduledExecutor();
@@ -141,6 +184,31 @@ public class VirtualRobotController {
         }
     };
 
+    public synchronized void addScore(int delta) {
+        score += delta;
+        final int s = score;
+        Platform.runLater(() -> {
+            if (lblScore != null) lblScore.setText("Score: " + s);
+        });
+    }
+
+    public synchronized int getScore() { return score; }
+
+    public synchronized void resetScore() {
+        score = 0;
+        Platform.runLater(() -> {
+            if (lblScore != null) lblScore.setText("Score: 0");
+        });
+    }
+
+    private void setCreditPosition() {
+        if (lblCredit == null) return;
+        // place near bottom-right of the fieldPane (fieldPane is square)
+        lblCredit.setLayoutX(fieldWidth - 250);
+        lblCredit.setLayoutY(fieldWidth - 18);
+    }
+
+
     boolean getOpModeInitialized(){ return opModeInitialized; }
 
     public void initialize() {
@@ -169,8 +237,74 @@ public class VirtualRobotController {
         pathLine.setStrokeWidth(2);
         pathLine.setVisible(false);
         fieldPane.getChildren().addAll(new Group(pathRect, pathLine));
+        Image logo = new Image(getClass().getResourceAsStream("cyber_sages.png"));
+        imgCyberSages.setImage(logo);
+        fieldPane.setOnMouseMoved(e -> {
+            double xPx = e.getX();
+            double yPx = e.getY();
+
+            double xIn = (xPx - fieldPane.getWidth()/2) / VirtualField.PIXELS_PER_INCH;
+            double yIn = (fieldPane.getHeight()/2 - yPx) / VirtualField.PIXELS_PER_INCH;
+
+            controllerLabel.setText(
+                    String.format("Cursor:  X = %.2f  Y = %.2f", xIn, yIn)
+            );
+        });
+
+
+// Position logo near top center of field
+        imgCyberSages.layoutXProperty().bind(
+                fieldPane.widthProperty().divide(2).subtract(215));
+        imgCyberSages.setLayoutY(6);
+
+// Team number directly under logo
+        lblTeamNumber.layoutXProperty().bind(
+                fieldPane.widthProperty().divide(2).subtract(120));
+        lblTeamNumber.setLayoutY(1);
+
+
+        rbStopwatch.setSelected(true); // default
+
 
         addConstraintMasks();
+
+        // timer mode toggle group
+
+        matchMode = true;
+
+        timerModeGroup.selectedToggleProperty().addListener((obs, oldT, newT) -> {
+            matchMode = rbTwoMin.isSelected();
+        });
+
+// score label init
+        if (lblScore != null) lblScore.setText("Score: 0");
+
+// credit label position (once sizes are known)
+        setCreditPosition();
+
+
+        // Timer mode toggle group
+        rbStopwatch.setToggleGroup(timerModeGroup);
+        rbStopwatch.setSelected(true);
+
+
+
+        lblCredit.layoutXProperty().bind(fieldPane.widthProperty().subtract(lblCredit.widthProperty()).subtract(240));
+        lblCredit.layoutYProperty().bind(fieldPane.heightProperty().subtract(lblCredit.heightProperty()).subtract(4));
+        /* ===== Credit label (bottom-right) =====
+        javafx.scene.control.Label credit = new javafx.scene.control.Label("Original Controller Design: Beta8397");
+        credit.setStyle("-fx-font-size: 10px; -fx-text-fill: rgba(255,255,255,0.6);");
+
+// keep in bottom-right even if window changes size
+        credit.layoutXProperty().bind(fieldPane.widthProperty().subtract(credit.widthProperty()).subtract(240));
+        credit.layoutYProperty().bind(fieldPane.heightProperty().subtract(credit.heightProperty()).subtract(4));
+
+        fieldPane.getChildren().add(credit);*/
+
+
+
+
+
 
         setupPhysicsWorld();
 
@@ -487,6 +621,13 @@ public class VirtualRobotController {
             /*
              * INIT has been pressed.
              */
+            resetScore();
+            matchEnded = false;
+            Platform.runLater(() -> {
+                if (lblRunTime != null) lblRunTime.setText(matchMode ? "2:00" : "0.00");
+            });
+
+
             if (!initOpMode()) return;
             pathLine.getPoints().clear();
             txtTelemetry.setText("");
@@ -607,9 +748,36 @@ public class VirtualRobotController {
                     Thread.currentThread().interrupt();
                 }
 
-                // Update the run time display
+                // Update the timer display (Stopwatch or 2:00 Match countdown)
                 final long opModeRunNanos = System.nanoTime() - opModeStartNanos;
-                Platform.runLater(()->lblRunTime.setText(String.format("%.2f", opModeRunNanos/1000000000.0)));
+                final double elapsedSec = opModeRunNanos / 1_000_000_000.0;
+
+                Platform.runLater(() -> {
+                    boolean matchMode = rbTwoMin.isSelected();
+
+
+                    if (!matchMode) {
+                        // Stopwatch mode
+                        lblRunTime.setText(String.format(Locale.getDefault(), "%.2f", elapsedSec));
+                    } else {
+                        // 2:00 match countdown
+                        double remaining = Math.max(0.0, MATCH_LENGTH_SECONDS - elapsedSec);
+                        Config.remainingMatchTimeMillis = remaining;
+
+
+                        int mm = (int)(remaining / 60.0);
+                        int ss = (int)(remaining % 60.0);
+
+                        lblRunTime.setText(String.format(Locale.getDefault(), "%d:%02d", mm, ss));
+
+                        // Auto-stop when time is up
+                        if (remaining <= 0.0 && opModeStarted) {
+                            // fire STOP on the UI thread (uses your existing STOP logic)
+                            driverButton.fire();
+                        }
+                    }
+                });
+
 
                 // to keep the guarantee that this is updated
                 opMode.time = opMode.getRuntime();
@@ -710,7 +878,7 @@ public class VirtualRobotController {
     public void updateTelemetryDisplay(String telemetryText) {
         txtTelemetry.setText(telemetryText);
     }
-		
+
     @FXML
     private void handleCheckBoxAutoHumanAction(ActionEvent event){
         Config.GAME.setHumanPlayerAuto(checkBoxAutoHuman.isSelected());

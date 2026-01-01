@@ -56,9 +56,13 @@ public class MecanumDemo extends LinearOpMode {
         double minAccel = 0;
 
         while (opModeIsActive()){
-            double px = gamepad1.left_stick_x;
-            double py = -gamepad1.left_stick_y;
-            double pa = gamepad1.left_trigger - gamepad1.right_trigger;
+            double py = -gamepad1.left_stick_y;                 // forward/back stays on left stick
+            double pa = -gamepad1.right_stick_x; // turn stays on triggers
+
+            double px = 0.0;  // strafe now on bumpers ONLY
+            if (gamepad1.right_bumper) px = 1.0;   // strafe right
+            else if (gamepad1.left_bumper) px = -1.0; // strafe left
+
 
             if (Math.abs(pa) < 0.05) pa = 0;
             double p1 = -px + py - pa;
