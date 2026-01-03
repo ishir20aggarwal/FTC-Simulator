@@ -92,3 +92,16 @@ This project is built upon the **Virtual Robot Controller framework** originally
 **Beta8397 — Original Controller Design**
 
 Their work provides the core physics engine, field rendering system, robot architecture, and simulator infrastructure that enable this project. All mecanum control systems, game mechanics, scoring rules, and simulation features described above are custom extensions built on top of that foundation.
+
+
+
+
+
+## How to install
+1.Go to code and copy the link. 
+2.Install Android Studio and create a project from version control.
+3.Paste the link in.
+4.Go to File, Project Structure and SDK Location
+5. Install BellSoft Liberica JDK 17 (Full)
+6. Choose BellSoft 17 and Sync Gradle Files
+7. Rebuild and Run
